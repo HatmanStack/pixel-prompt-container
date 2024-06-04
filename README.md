@@ -36,7 +36,7 @@ All models are opensource and available on HuggingFace.
 
 ### Prompts
 
-- **Gustavosta/MagicPrompt-Stable-Diffusion**
+- **mistralai/Mistral-7B-Instruct-v0.3**
 
 ## License
 
