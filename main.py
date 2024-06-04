@@ -36,7 +36,6 @@ async def inferencePrompt(item: promptType):
     if response.status_code != 200:
         print(response.json().get("error_type"), response.status_code)
         return {"error": response.json().get("error")}
-    
     return response.json()
 
 @app.post("/api")
