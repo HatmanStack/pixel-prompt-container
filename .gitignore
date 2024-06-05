@@ -4,6 +4,7 @@ yarn.lock
 .env
 app.json
 package-lock.json
+__pycache__/
 
 # macOS
 .DS_Store

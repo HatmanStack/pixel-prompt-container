@@ -1,17 +1,21 @@
 {
   "files": {
-    "main.js": "/static/js/main.f1fc666a.js",
-    "static/js/115.761e1000.js": "/static/js/115.761e1000.js",
+    "main.js": "/static/js/main.e48790da.js",
+    "static/js/947.e4fc21de.js": "/static/js/947.e4fc21de.js",
+    "static/media/busta.png": "/static/media/busta.5f143627ffa2c3e881c0.png",
     "static/media/Sigmar-Regular.ttf": "/static/media/Sigmar-Regular.daeeaca2f7490cb1c50c.ttf",
     "static/media/avocado.jpg": "/static/media/avocado.667d95040b7743f10475.jpg",
+    "static/media/circle.png": "/static/media/circle.ec41e37092298d9f2a54.png",
+    "static/media/down.png": "/static/media/down.96a1baf6b806338f1733.png",
+    "static/media/right.png": "/static/media/right.6e46922e35869806233f.png",
     "index.html": "/index.html",
     "serve.json": "/serve.json",
     "manifest.json": "/manifest.json",
-    "main.f1fc666a.js.map": "/static/js/main.f1fc666a.js.map",
-    "115.761e1000.js.map": "/static/js/115.761e1000.js.map"
+    "main.e48790da.js.map": "/static/js/main.e48790da.js.map",
+    "947.e4fc21de.js.map": "/static/js/947.e4fc21de.js.map"
   },
   "entrypoints": [
-    "static/js/115.761e1000.js",
-    "static/js/main.f1fc666a.js"
+    "static/js/947.e4fc21de.js",
+    "static/js/main.e48790da.js"
   ]
 }
