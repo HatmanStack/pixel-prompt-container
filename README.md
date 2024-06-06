@@ -1,3 +1,12 @@
+---
+title: Pixel Prompt
+emoji: 🔥
+colorFrom: red
+colorTo: blue
+sdk: docker
+pinned: false
+license: mit
+---
 # Pixel Prompt Container 
 
 This repository contains a static React Native application built using Expo with FastApi and Docker for deployment.   It's serving several diffusion models that use the huggingface [inference-api](https://huggingface.co/docs/api-inference/index). A blog post explaining this deployment and the HuggingFace Inference API can be found [here](https://medium.com/@HatmanStack/cloud-bound-hugging-face-spaces-1101c569690d).
@@ -37,6 +46,10 @@ All models are opensource and available on HuggingFace.
 ### Prompts
 
 - **mistralai/Mistral-7B-Instruct-v0.3**
+
+## Functionality
+
+The Style and Layout components use Huggingface's IP adapter which isn't available in the HuggingFace Inference API yet.  If you decide to use custom endpoints this is available now.  A placeholder image is included.
 
 ## License
 

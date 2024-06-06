@@ -2,3 +2,4 @@ Pillow
 requests
 uvicorn
 fastapi
+diffusers
