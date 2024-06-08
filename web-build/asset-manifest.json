@@ -1,6 +1,6 @@
 {
   "files": {
-    "main.js": "/static/js/main.2a9af0af.js",
+    "main.js": "/static/js/main.31f00e00.js",
     "static/js/133.507aa947.js": "/static/js/133.507aa947.js",
     "static/media/busta.png": "/static/media/busta.5f143627ffa2c3e881c0.png",
     "static/media/Sigmar-Regular.ttf": "/static/media/Sigmar-Regular.daeeaca2f7490cb1c50c.ttf",
@@ -11,11 +11,11 @@
     "index.html": "/index.html",
     "serve.json": "/serve.json",
     "manifest.json": "/manifest.json",
-    "main.2a9af0af.js.map": "/static/js/main.2a9af0af.js.map",
+    "main.31f00e00.js.map": "/static/js/main.31f00e00.js.map",
     "133.507aa947.js.map": "/static/js/133.507aa947.js.map"
   },
   "entrypoints": [
     "static/js/133.507aa947.js",
-    "static/js/main.2a9af0af.js"
+    "static/js/main.31f00e00.js"
   ]
 }
