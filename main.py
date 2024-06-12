@@ -3,7 +3,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
-from diffusers.utils import load_image
 from huggingface_hub import InferenceClient
 from transformers import AutoTokenizer
 import torch
@@ -29,8 +28,9 @@ app.add_middleware(
 )
 
 token = os.environ.get("HF_TOKEN")
+
 options = {"use_cache": False, "wait_for_model": True}
-headers = {"Authorization": f"Bearer {token}"}
+headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0"}
 
 class Item(BaseModel):
     prompt: str
@@ -38,7 +38,7 @@ class Item(BaseModel):
     guidance: float
     modelID: str
     image: str
-    scale: Dict[str, Dict[str, List[float]]]    # Fix the syntax error
+    scale: Dict[str, Dict[str, List[float]]]    
 
 class promptType(BaseModel):
     prompt: str
@@ -55,11 +55,11 @@ async def inferencePrompt(item: promptType):
         ]
     input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     API_URL = f'https://api-inference.huggingface.co/models/{modelID}'
-    print(API_URL)  
+    
     parameters = {"return_full_text":False,"max_new_tokens":500}
     response = requests.post(API_URL, headers=headers, \
         json={"inputs":input, "parameters": parameters,"options": options})
-    print(response.json())
+    
     if response.status_code != 200:
         print(response.json().get("error_type"), response.status_code)
         return {"error": response.json().get("error")}
