@@ -26,6 +26,13 @@ All models are opensource and available on HuggingFace.
 
 ### Diffusion
 
+#### Image to Image
+
+- **timbrooks/instruct-pix2pix**
+- **stabilityai/stable-diffusion-xl-refiner-1.0**
+       
+#### Text to Image
+
 - **SPO-Diffusion-Models/SPO-SDXL_4k-p_10ep**
 - **stabilityai/stable-diffusion-xl-base-1.0**
 - **Fictiverse/Voxel_XL_Lora**
@@ -40,8 +47,10 @@ All models are opensource and available on HuggingFace.
 - **segmind/Segmind-Vega**
 - **Pclanglais/Mickey-1928**
 - **firella/202404032300-oldvis-choropleth-lora-sdxl**
+- **digiplay/AbsoluteReality_v1.8.1**
 - **0x7o/RussianVibe-XL-v2.0**
 - **dreamlike-art/dreamlike-photoreal-2.0**
+- **digiplay/Acorn_Photo_v1**
 
 ### Prompts
 

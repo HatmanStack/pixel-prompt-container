@@ -3,3 +3,10 @@ requests
 uvicorn
 fastapi
 diffusers
+huggingface_hub
+transformers
+sentencepiece
+protobuf
+aiohttp
+accelerate
+safetensors
