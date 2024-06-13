@@ -44,7 +44,7 @@ All models are opensource and available on HuggingFace.
 
 - **SPO-Diffusion-Models/SPO-SDXL_4k-p_10ep**
 - **stabilityai/stable-diffusion-xl-base-1.0**
-- **Fictiverse/Voxel_XL_Lora**
+- **Fictiverse/Fictiverse/Stable_Diffusion_VoxelArt_Model**
 - **Fictiverse/Stable_Diffusion_PaperCut_Model**
 - **dallinmackay/Van-Gogh-diffusion**
 - **nousr/robo-diffusion**
@@ -54,20 +54,18 @@ All models are opensource and available on HuggingFace.
 - **prompthero/openjourney**
 - **juliajoanna/sdxl-flintstones_finetuning_1**
 - **segmind/Segmind-Vega**
-- **Pclanglais/Mickey-1928**
-- **firella/202404032300-oldvis-choropleth-lora-sdxl**
 - **digiplay/AbsoluteReality_v1.8.1**
-- **0x7o/RussianVibe-XL-v2.0**
 - **dreamlike-art/dreamlike-photoreal-2.0**
 - **digiplay/Acorn_Photo_v1**
 
 ### Prompts
 
 - **mistralai/Mistral-7B-Instruct-v0.3**
+- **roborovski/superprompt-v1**
 
 ## Functionality
 
-The Style and Layout components use Huggingface's IP adapter which isn't available in the HuggingFace Inference API yet.  If you decide to use custom endpoints this is available now.  A placeholder image is included.
+This App was creating using the HuggingFace Inference API.  Although Free to use, some functionality isn't available yet.  The Style and Layout switches are based on the IP adapter which isn't supported by the Inference API. If you decide to use custom endpoints this is available now.
 
 ## License
 

@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
 from huggingface_hub import InferenceClient
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, T5Tokenizer, T5ForConditionalGeneration
 import torch
 import json
 import requests
@@ -56,15 +56,33 @@ async def inferencePrompt(item: promptType):
     input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     API_URL = f'https://api-inference.huggingface.co/models/{modelID}'
     
-    parameters = {"return_full_text":False,"max_new_tokens":500}
+    parameters = {"return_full_text":False,"max_new_tokens":1000}
     response = requests.post(API_URL, headers=headers, \
         json={"inputs":input, "parameters": parameters,"options": options})
-    
+
+
     if response.status_code != 200:
         print(response.json().get("error_type"), response.status_code)
         return {"error": response.json().get("error")}
+    else:
+        tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-small")
+        print(response.json()[0]["generated_text"] )
+        input_text = "Expand the following prompt to add more detail: " + response.json()[0]["generated_text"].split("Shortened Version:")[1]
+        input = tokenizer(input_text, return_tensors="pt", padding="max_length", truncation=True, max_length=512)
+
+        API_URL = f'https://api-inference.huggingface.co/models/roborovski/superprompt-v1'
     
-    return response.json()
+        parameters = {"max_new_tokens":250}
+        response1 = requests.post(API_URL, headers=headers, \
+            json={"inputs":input_text, "parameters": parameters,"options": options})
+        
+        if response1.status_code != 200:
+            print(response1.json().get("error_type"), response.status_code)
+            return {"error": response.json().get("error")}
+        response_data = response.json()
+        response_data[0]["flan"] = response1.json()[0]["generated_text"]
+        print(response_data)
+    return response_data
 
 
 async def wake_model(modelID):
@@ -82,7 +100,10 @@ async def wake_model(modelID):
     except Exception as e:
         print(f"An error occurred: {e}")
         
-
+def chunk_prompt(prompt, tokenizer, chunk_size=77):
+    tokens = tokenizer.encode(prompt)
+    chunks = [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
+    return chunks
 
 @app.post("/api")
 async def inference(item: Item):
@@ -106,13 +127,23 @@ async def inference(item: Item):
     if "prompthero" in item.modelID:
         prompt = "mdjrny-v4 style, " + item.prompt 
     if "Voxel" in item.modelID:
-        prompt = "voxel style, " + item.prompt
+        prompt = "VoxelArt, " + item.prompt
     if "BalloonArt" in item.modelID:
         prompt = "BalloonArt, " + item.prompt
     if "PaperCut" in item.modelID:
         prompt = "PaperCut, " + item.prompt
+
+   
+    
+    tokenizer = AutoTokenizer.from_pretrained(item.modelID, subfolder="tokenizer") 
+    chunks = chunk_prompt(item.prompt, tokenizer)
+    
+    tokenized_chunks = [tokenizer.encode(tokenizer.decode(chunk), return_tensors="pt") for chunk in chunks]
+    tokenized_prompt = torch.cat(tokenized_chunks, dim=1)
+    tokenized_prompt_list = tokenized_prompt.tolist()[0]
+    
     negative_prompt = "text, watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
-    data = {"inputs":prompt, "negative_prompt": negative_prompt, "options":options}
+    data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": negative_prompt, "options":options}
     API_URL = "https://api-inference.huggingface.co/models/" + item.modelID
     api_data = json.dumps(data)
     response = requests.request("POST", API_URL, headers=headers, data=api_data)
