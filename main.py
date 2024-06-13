@@ -40,12 +40,19 @@ class Item(BaseModel):
     image: str
     scale: Dict[str, Dict[str, List[float]]]    
 
-class promptType(BaseModel):
+class PromptType(BaseModel):
     prompt: str
     modelID: str
 
+class Core(BaseModel):
+    model: str
+
+@app.post("/core")
+async def core(item: Core):
+    wake_model(item.model)
+
 @app.post("/inferencePrompt")
-async def inferencePrompt(item: promptType):
+async def inferencePrompt(item: PromptType):
     modelID = item.modelID
     tokenizer = AutoTokenizer.from_pretrained(modelID)
     chat = [
@@ -56,7 +63,7 @@ async def inferencePrompt(item: promptType):
     input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     API_URL = f'https://api-inference.huggingface.co/models/{modelID}'
     
-    parameters = {"return_full_text":False,"max_new_tokens":1000}
+    parameters = {"return_full_text":False,"max_new_tokens":500}
     response = requests.post(API_URL, headers=headers, \
         json={"inputs":input, "parameters": parameters,"options": options})
 
@@ -66,8 +73,7 @@ async def inferencePrompt(item: promptType):
         return {"error": response.json().get("error")}
     else:
         tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-small")
-        print(response.json()[0]["generated_text"] )
-        input_text = "Expand the following prompt to add more detail: " + response.json()[0]["generated_text"].split("Shortened Version:")[1]
+        input_text = "Expand the following prompt to add more detail: " + item.prompt.split("seed string. :")[1]
         input = tokenizer(input_text, return_tensors="pt", padding="max_length", truncation=True, max_length=512)
 
         API_URL = f'https://api-inference.huggingface.co/models/roborovski/superprompt-v1'
