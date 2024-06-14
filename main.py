@@ -4,7 +4,9 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
 from huggingface_hub import InferenceClient
-from transformers import AutoTokenizer, T5Tokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, T5Tokenizer, CLIPTextModel
+from torch.nn.functional import cosine_similarity
+import numpy as np
 import torch
 import json
 import requests

@@ -1,6 +1,6 @@
 {
   "files": {
-    "main.js": "/static/js/main.30214d15.js",
+    "main.js": "/static/js/main.61bb8bf6.js",
     "static/js/133.507aa947.js": "/static/js/133.507aa947.js",
     "static/media/Sigmar-Regular.ttf": "/static/media/Sigmar-Regular.daeeaca2f7490cb1c50c.ttf",
     "static/media/avocado.jpg": "/static/media/avocado.667d95040b7743f10475.jpg",
@@ -8,16 +8,18 @@
     "static/media/join_colored.png": "/static/media/join_colored.196d8ae6245a668731e5.png",
     "static/media/join.png": "/static/media/join.110714915a44dac5efa1.png",
     "static/media/close.png": "/static/media/close.7b63baa66ff83915615a.png",
+    "static/media/delete_colored.png": "/static/media/delete_colored.888943ef6f1f40237fcd.png",
+    "static/media/delete.png": "/static/media/delete.22bf9b10369bd23cac1c.png",
     "static/media/down.png": "/static/media/down.96a1baf6b806338f1733.png",
     "static/media/right.png": "/static/media/right.6e46922e35869806233f.png",
     "index.html": "/index.html",
     "serve.json": "/serve.json",
     "manifest.json": "/manifest.json",
-    "main.30214d15.js.map": "/static/js/main.30214d15.js.map",
+    "main.61bb8bf6.js.map": "/static/js/main.61bb8bf6.js.map",
     "133.507aa947.js.map": "/static/js/133.507aa947.js.map"
   },
   "entrypoints": [
     "static/js/133.507aa947.js",
-    "static/js/main.30214d15.js"
+    "static/js/main.61bb8bf6.js"
   ]
 }
