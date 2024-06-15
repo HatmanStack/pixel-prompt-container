@@ -4,15 +4,13 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
 from huggingface_hub import InferenceClient
-from transformers import AutoTokenizer, T5Tokenizer, CLIPTextModel
-from torch.nn.functional import cosine_similarity
-import numpy as np
+from transformers import AutoTokenizer, T5Tokenizer
+from pydantic import BaseModel
 import torch
 import json
 import requests
 import base64
 import os
-from pydantic import BaseModel
 from typing import Dict, List  
 from PIL import Image, ImageOps
 from io import BytesIO
@@ -33,6 +31,7 @@ token = os.environ.get("HF_TOKEN")
 
 options = {"use_cache": False, "wait_for_model": True}
 headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0"}
+API_URL = f'https://api-inference.huggingface.co/models/'
 
 class Item(BaseModel):
     prompt: str
@@ -53,41 +52,50 @@ class Core(BaseModel):
 async def core(item: Core):
     wake_model(item.model)
 
-@app.post("/inferencePrompt")
-async def inferencePrompt(item: PromptType):
-    modelID = item.modelID
+def getMistrailPrompt(prompt, modelID, max_tokens=1000, attempts=1):
+    modelID = "mistralai/Mistral-7B-Instruct-v0.3" if modelID == 'google/gemma-1.1-7b-it' else "google/gemma-1.1-7b-it"   
     tokenizer = AutoTokenizer.from_pretrained(modelID)
-    chat = [
-        {"role": "user", "content": "You create prompts for the Stable Diffusion series of machine learning models."},
-        {"role": "assistant", "content": "What would you like me to do?"},
-        {"role": "user", "content": f'{item.prompt}'},
-        ]
-    input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-    API_URL = f'https://api-inference.huggingface.co/models/{modelID}'
+    chat = []
+    if modelID == "mistralai/Mistral-7B-Instruct-v0.3":
+        chat = [
+            {"role": "user", "content": "You create prompts for the Stable Diffusion series of machine learning models."},
+            {"role": "assistant", "content": "What would you like me to do?"},
+            {"role": "user", "content": f'Your prompt should be confied to {max_tokens} tokens maximum.  Here is your seed string: {prompt}'},
+            ]
+    if modelID == "google/gemma-1.1-7b-it":
+        chat = [
+                {"role": "user", "content": f'You create prompts for the Stable Diffusion series of machine learning models.  \
+                Your prompt should be confied to {max_tokens} tokens maximum.  Here is your seed string: {prompt}'}]
     
-    parameters = {"return_full_text":False,"max_new_tokens":500}
-    response = requests.post(API_URL, headers=headers, \
+    input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+    
+    parameters = {"return_full_text":False,"max_new_tokens":max_tokens}
+    response = requests.post(API_URL + modelID, headers=headers, \
         json={"inputs":input, "parameters": parameters,"options": options})
-
-
     if response.status_code != 200:
         print(response.json().get("error_type"), response.status_code)
         return {"error": response.json().get("error")}
-    else:
-        tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-small")
-        input_text = "Expand the following prompt to add more detail: " + item.prompt.split("seed string. :")[1]
-        input = tokenizer(input_text, return_tensors="pt", padding="max_length", truncation=True, max_length=512)
+    if 'I am unable to provide' in response.json()[0]['generated_text']:
+        attempts -= 1
+    if attempts < 2:
+        getMistrailPrompt(prompt, modelID, max_tokens-700, attempts + 1)
+    return response.json()
 
-        API_URL = f'https://api-inference.huggingface.co/models/roborovski/superprompt-v1'
-    
-        parameters = {"max_new_tokens":250}
-        response1 = requests.post(API_URL, headers=headers, \
+@app.post("/inferencePrompt")
+async def inferencePrompt(item: PromptType):
+    response_data = getMistrailPrompt(item.prompt, item.modelID)
+    response_data[0]["generated_text"] = response_data[0]["generated_text"].replace("*", "")
+    if "error" in response_data:
+        return response_data
+    else:
+        input_text = "Expand the following prompt to add more detail: " + item.prompt.split("seed string. :")[1]
+        parameters = {"max_new_tokens":77}
+        response1 = requests.post('https://api-inference.huggingface.co/models/roborovski/superprompt-v1', headers=headers, \
             json={"inputs":input_text, "parameters": parameters,"options": options})
         
         if response1.status_code != 200:
-            print(response1.json().get("error_type"), response.status_code)
-            return {"error": response.json().get("error")}
-        response_data = response.json()
+            print(response1.json().get("error_type"), response1.status_code)
+            return {"error": response1.json().get("error")}
         response_data[0]["flan"] = response1.json()[0]["generated_text"]
         print(response_data)
     return response_data
@@ -95,13 +103,12 @@ async def inferencePrompt(item: PromptType):
 
 async def wake_model(modelID):
     data = {"inputs":"wake up call", "options":options}
-    API_URL = "https://api-inference.huggingface.co/models/" + modelID
     headers = {"Authorization": f"Bearer {token}"}
     api_data = json.dumps(data)
     try:
         timeout = aiohttp.ClientTimeout(total=60)  # Set timeout to 60 seconds
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(API_URL, headers=headers, data=api_data) as response:
+            async with session.post(API_URL + modelID, headers=headers, data=api_data) as response:
                 pass
         print('Model Waking')
         
@@ -141,8 +148,6 @@ async def inference(item: Item):
     if "PaperCut" in item.modelID:
         prompt = "PaperCut, " + item.prompt
 
-   
-    
     tokenizer = AutoTokenizer.from_pretrained(item.modelID, subfolder="tokenizer") 
     chunks = chunk_prompt(item.prompt, tokenizer)
     
@@ -152,10 +157,10 @@ async def inference(item: Item):
     
     negative_prompt = "text, watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
     data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": negative_prompt, "options":options}
-    API_URL = "https://api-inference.huggingface.co/models/" + item.modelID
-    api_data = json.dumps(data)
-    response = requests.request("POST", API_URL, headers=headers, data=api_data)
     
+    api_data = json.dumps(data)
+    response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
+
     image_stream = BytesIO(response.content)
     image = Image.open(image_stream)
     image.save("response.png")
@@ -163,6 +168,7 @@ async def inference(item: Item):
         base64image = base64.b64encode(f.read())
     
     return {"output": base64image}
+    
 
 @app.post("/img2img")
 async def img2img(item: Item):

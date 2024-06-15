@@ -10,4 +10,3 @@ protobuf
 aiohttp
 accelerate
 safetensors
-numpy
