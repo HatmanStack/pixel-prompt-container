@@ -1,6 +1,6 @@
 {
   "files": {
-    "main.js": "/static/js/main.de91fb57.js",
+    "main.js": "/static/js/main.c2378e72.js",
     "static/js/968.ccf00a78.js": "/static/js/968.ccf00a78.js",
     "static/media/Sigmar-Regular.ttf": "/static/media/Sigmar-Regular.daeeaca2f7490cb1c50c.ttf",
     "static/media/avocado.jpg": "/static/media/avocado.667d95040b7743f10475.jpg",
@@ -21,11 +21,11 @@
     "index.html": "/index.html",
     "serve.json": "/serve.json",
     "manifest.json": "/manifest.json",
-    "main.de91fb57.js.map": "/static/js/main.de91fb57.js.map",
+    "main.c2378e72.js.map": "/static/js/main.c2378e72.js.map",
     "968.ccf00a78.js.map": "/static/js/968.ccf00a78.js.map"
   },
   "entrypoints": [
     "static/js/968.ccf00a78.js",
-    "static/js/main.de91fb57.js"
+    "static/js/main.c2378e72.js"
   ]
 }

@@ -6,6 +6,7 @@ from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixP
 from huggingface_hub import InferenceClient
 from transformers import AutoTokenizer, T5Tokenizer
 from pydantic import BaseModel
+from gradio_client import Client
 import torch
 import json
 import requests
@@ -89,7 +90,7 @@ async def inferencePrompt(item: PromptType):
         return response_data
     else:
         input_text = "Expand the following prompt to add more detail: " + item.prompt.split("seed string. :")[1]
-        parameters = {"max_new_tokens":77}
+        parameters = {"max_new_tokens":250}
         response1 = requests.post('https://api-inference.huggingface.co/models/roborovski/superprompt-v1', headers=headers, \
             json={"inputs":input_text, "parameters": parameters,"options": options})
         
@@ -120,8 +121,34 @@ def chunk_prompt(prompt, tokenizer, chunk_size=77):
     chunks = [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
     return chunks
 
+def gradioClient(item):
+    client = Client(item.modelID)
+    result = client.predict(
+            prompt=item.prompt,
+            negative_prompt="text, watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry",
+            seed=0,
+            randomize_seed=True,
+            width=1024,
+            height=1024,
+            guidance_scale=item.guidance,
+            num_inference_steps=item.steps,
+            api_name="/infer"
+    )
+    
+    img = Image.open(result[0])
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr = img_byte_arr.getvalue()
+    base64_img = base64.b64encode(img_byte_arr)
+    
+    return base64_img
+    
+
 @app.post("/api")
 async def inference(item: Item):
+    if "stable-diffusion-3" in item.modelID:
+        useGradio = gradioClient(item)
+        return {"output": useGradio}
     activeModels = InferenceClient().list_deployed_models()
     if item.modelID not in activeModels['text-to-image']:
         asyncio.create_task(wake_model(item.modelID))

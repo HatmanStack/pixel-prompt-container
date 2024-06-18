@@ -10,3 +10,4 @@ protobuf
 aiohttp
 accelerate
 safetensors
+gradio_client
