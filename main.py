@@ -6,7 +6,7 @@ from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixP
 from huggingface_hub import InferenceClient
 from transformers import AutoTokenizer, T5Tokenizer
 from pydantic import BaseModel
-from gradio_client import Client
+from gradio_client import Client, file
 import torch
 import json
 import requests
@@ -33,6 +33,8 @@ token = os.environ.get("HF_TOKEN")
 options = {"use_cache": False, "wait_for_model": True}
 headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0"}
 API_URL = f'https://api-inference.huggingface.co/models/'
+perm_negative_prompt = "watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
+    
 
 class Item(BaseModel):
     prompt: str
@@ -121,12 +123,11 @@ def chunk_prompt(prompt, tokenizer, chunk_size=77):
     chunks = [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
     return chunks
 
-def gradioClient(item):
-    client = Client(item.modelID)
+def gradioSD3(item):
+    client = Client(item.modelID, hf_token=token)
     result = client.predict(
             prompt=item.prompt,
-            negative_prompt="text, watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry",
-            seed=0,
+            negative_prompt=perm_negative_prompt,
             randomize_seed=True,
             width=1024,
             height=1024,
@@ -142,12 +143,42 @@ def gradioClient(item):
     base64_img = base64.b64encode(img_byte_arr)
     
     return base64_img
+
+def gradioRefiner(item):
+    image_data = base64.b64decode(item.image)
+    # Save the image to a file
+    with open('image.png', 'wb') as f:
+        f.write(image_data)
+    client = Client("tonyassi/IP-Adapter-Playground", hf_token=token)
+    result = client.predict(
+            ip=file('image.png'),
+            prompt=item.prompt,
+            neg_prompt=perm_negative_prompt,
+            width=1024,
+            height=1024,
+            ip_scale=item.scale,
+            strength=0.7,
+            guidance=item.guidance,
+            steps=item.steps,
+            api_name="/text_to_image"
+    )
+    
+    img = Image.open(result[0])
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr = img_byte_arr.getvalue()
+    base64_img = base64.b64encode(img_byte_arr)
+    
+    return base64_img
     
 
 @app.post("/api")
 async def inference(item: Item):
     if "stable-diffusion-3" in item.modelID:
-        useGradio = gradioClient(item)
+        useGradio = gradioSD3(item)
+        return {"output": useGradio}
+    if "gradiotxt2img" in item.modelID:
+        useGradio = gradioRefiner(item)
         return {"output": useGradio}
     activeModels = InferenceClient().list_deployed_models()
     if item.modelID not in activeModels['text-to-image']:
@@ -182,8 +213,7 @@ async def inference(item: Item):
     tokenized_prompt = torch.cat(tokenized_chunks, dim=1)
     tokenized_prompt_list = tokenized_prompt.tolist()[0]
     
-    negative_prompt = "text, watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
-    data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": negative_prompt, "options":options}
+    data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": perm_negative_prompt, "options":options}
     
     api_data = json.dumps(data)
     response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
@@ -231,7 +261,7 @@ async def img2img(item: Item):
         image = pipeline(
             prompt=item.prompt,
             ip_adapter_image=image,
-            negative_prompt="text, watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry",
+            negative_prompt=perm_negative_prompt,
             guidance_scale=item.guidance,
             num_inference_steps=item.steps,
             generator=generator,
