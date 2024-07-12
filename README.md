@@ -62,8 +62,8 @@ All models are opensource and available on HuggingFace.
 ### Prompts
 
 - **mistralai/Mistral-7B-Instruct-v0.3**
-- **roborovski/superprompt-v1**
-- **google/gemma-1.1-7b-it**
+- **Gustavosta/MagicPrompt-Stable-Diffusion**
+- **meta-llama/Meta-Llama-3-70B-Instruct**
 
 ## Functionality
 

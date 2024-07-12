@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
-from huggingface_hub import InferenceClient
+from huggingface_hub import InferenceClient, login
 from transformers import AutoTokenizer, T5Tokenizer
 from pydantic import BaseModel
 from gradio_client import Client, file
@@ -17,6 +17,7 @@ from PIL import Image, ImageOps
 from io import BytesIO
 import aiohttp
 import asyncio
+from dotenv import load_dotenv
 
 app = FastAPI()
 
@@ -28,13 +29,17 @@ app.add_middleware(
     allow_headers=["*"],  
 )
 
+load_dotenv()
 token = os.environ.get("HF_TOKEN")
-
+login(token)
+prompt_model = "meta-llama/Meta-Llama-3-70B-Instruct"
+prompt_model_backup = "mistralai/Mistral-7B-Instruct-v0.3"
+magic_prompt_model = "Gustavosta/MagicPrompt-Stable-Diffusion"
 options = {"use_cache": False, "wait_for_model": True}
-headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0"}
+parameters = {"return_full_text":False}
+headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0", 'Content-Type' :'application/json'}
 API_URL = f'https://api-inference.huggingface.co/models/'
 perm_negative_prompt = "watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
-    
 
 class Item(BaseModel):
     prompt: str
@@ -44,65 +49,51 @@ class Item(BaseModel):
     image: str
     scale: Dict[str, Dict[str, List[float]]]    
 
-class PromptType(BaseModel):
-    prompt: str
-    modelID: str
-
 class Core(BaseModel):
-    model: str
+    itemString: str
 
 @app.post("/core")
 async def core(item: Core):
-    wake_model(item.model)
+    print(item.itemString)
+    #wake_model(item.model)
 
-def getMistrailPrompt(prompt, modelID, max_tokens=1000, attempts=1):
-    modelID = "mistralai/Mistral-7B-Instruct-v0.3" if modelID == 'google/gemma-1.1-7b-it' else "google/gemma-1.1-7b-it"   
-    tokenizer = AutoTokenizer.from_pretrained(modelID)
-    chat = []
-    if modelID == "mistralai/Mistral-7B-Instruct-v0.3":
+def getPrompt(prompt, modelID, attempts=1):
+    input = prompt
+    if modelID != magic_prompt_model:
+        tokenizer = AutoTokenizer.from_pretrained(modelID)
         chat = [
-            {"role": "user", "content": "You create prompts for the Stable Diffusion series of machine learning models."},
-            {"role": "assistant", "content": "What would you like me to do?"},
-            {"role": "user", "content": f'Your prompt should be confied to {max_tokens} tokens maximum.  Here is your seed string: {prompt}'},
+            {"role": "user", "content": prompt_base},
+            {"role": "assistant", "content": "What is your seed string?"},
+            {"role": "user", "content": prompt},
             ]
-    if modelID == "google/gemma-1.1-7b-it":
-        chat = [
-                {"role": "user", "content": f'You create prompts for the Stable Diffusion series of machine learning models.  \
-                Your prompt should be confied to {max_tokens} tokens maximum.  Here is your seed string: {prompt}'}]
-    
-    input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-    
-    parameters = {"return_full_text":False,"max_new_tokens":max_tokens}
-    response = requests.post(API_URL + modelID, headers=headers, \
-        json={"inputs":input, "parameters": parameters,"options": options})
-    if response.status_code != 200:
-        print(response.json().get("error_type"), response.status_code)
-        return {"error": response.json().get("error")}
-    if 'I am unable to provide' in response.json()[0]['generated_text']:
-        attempts -= 1
-    if attempts < 2:
-        getMistrailPrompt(prompt, modelID, max_tokens-700, attempts + 1)
+        input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+    try:
+        apiData={"inputs":input, "parameters": parameters, "options": options}
+        response = requests.post(API_URL + modelID, headers=headers, data=json.dumps(apiData))
+        if response.status_code == 200:
+            try:
+                responseData = response.json()
+                return responseData
+            except ValueError as e:
+                print(f"Error parsing JSON: {e}")
+        else:
+            print(f"Error from API: {response.status_code} - {response.text}")
+            if attempts < 3:
+                modelID = prompt_model if modelID == prompt_model_backup else prompt_model_backup
+                getPrompt(prompt, modelID, attempts + 1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        if attempts < 3:
+            modelID = prompt_model if modelID == prompt_model_backup else prompt_model_backup 
+            getPrompt(prompt, modelID, attempts + 1)
     return response.json()
-
+    
 @app.post("/inferencePrompt")
-async def inferencePrompt(item: PromptType):
-    response_data = getMistrailPrompt(item.prompt, item.modelID)
-    response_data[0]["generated_text"] = response_data[0]["generated_text"].replace("*", "")
-    if "error" in response_data:
-        return response_data
-    else:
-        input_text = "Expand the following prompt to add more detail: " + item.prompt.split("seed string. :")[1]
-        parameters = {"max_new_tokens":250}
-        response1 = requests.post('https://api-inference.huggingface.co/models/roborovski/superprompt-v1', headers=headers, \
-            json={"inputs":input_text, "parameters": parameters,"options": options})
-        
-        if response1.status_code != 200:
-            print(response1.json().get("error_type"), response1.status_code)
-            return {"error": response1.json().get("error")}
-        response_data[0]["flan"] = response1.json()[0]["generated_text"]
-        print(response_data)
-    return response_data
-
+async def inferencePrompt(item: Core):
+    plain_response_data = getPrompt(item.itemString, prompt_model)
+    magic_response_data = getPrompt(item.itemString, magic_prompt_model)
+    returnJson = {"plain": plain_response_data[0]["generated_text"], "magic": item.itemString + magic_response_data[0]["generated_text"]}
+    return returnJson
 
 async def wake_model(modelID):
     data = {"inputs":"wake up call", "options":options}
@@ -216,7 +207,7 @@ async def inference(item: Item):
     data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": perm_negative_prompt, "options":options}
     
     api_data = json.dumps(data)
-    response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
+    response = requests.post( API_URL + item.modelID, headers=headers, data=api_data)
 
     image_stream = BytesIO(response.content)
     image = Image.open(image_stream)
@@ -273,7 +264,24 @@ async def img2img(item: Item):
         
         return {"output": base64image}
     
-    
+
+
+prompt_base = 'Instructions:\
+\
+1. Take the provided seed string as inspiration.\
+2. Formulate a single-sentence prompt that is clear, vivid, and imaginative.\
+3. Ensure the prompt is between 50 and 77 tokens.\
+4. Return only the prompt.\
+Format your response as follows:\
+Stable Diffusion Prompt: [Your prompt here]\
+\
+Remember:\
+\
+- The prompt should be concise yet descriptive.\
+- Avoid overly complex or abstract phrases.\
+- Make sure the prompt evokes strong imagery and can guide the creation of visual content.'
+
+
 app.mount("/", StaticFiles(directory="web-build", html=True), name="build")
 
 @app.get('/')

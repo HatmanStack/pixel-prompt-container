@@ -11,3 +11,4 @@ aiohttp
 accelerate
 safetensors
 gradio_client
+python-dotenv
