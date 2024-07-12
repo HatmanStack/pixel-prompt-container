@@ -11,9 +11,9 @@ license: mit
 
 This repository contains a static React Native application built using Expo with FastApi and Docker for deployment.   It's serving several diffusion models that use the huggingface [inference-api](https://huggingface.co/docs/api-inference/index). A blog post explaining this deployment and the HuggingFace Inference API can be found [here](https://medium.com/@HatmanStack/cloud-bound-hugging-face-spaces-1101c569690d).
 
-## Implementation 
+## Preview :zap:
 
-You can see other implementations of this application [here](https://github.com/hatmanstack/pixel-prompt).
+To preview the application visit the hosted version on the Hugging Face Spaces platform [here](https://hatman-pixel-prompt.hf.space).
 
 ## Installation   💻
 
