@@ -2,18 +2,18 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from diffusers import AutoPipelineForText2Image, StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
 from huggingface_hub import InferenceClient, login
-from transformers import AutoTokenizer, T5Tokenizer
+from transformers import AutoTokenizer
 from pydantic import BaseModel
 from gradio_client import Client, file
+from datetime import datetime
 import torch
 import json
 import requests
 import base64
 import os
 from typing import Dict, List  
-from PIL import Image, ImageOps
+from PIL import Image
 from io import BytesIO
 import aiohttp
 import asyncio
@@ -40,22 +40,40 @@ parameters = {"return_full_text":False}
 headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0", 'Content-Type' :'application/json'}
 API_URL = f'https://api-inference.huggingface.co/models/'
 perm_negative_prompt = "watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
+cwd = os.getcwd()
+pictures_directory = os.path.join(cwd, 'pictures')
 
 class Item(BaseModel):
     prompt: str
     steps: int
     guidance: float
     modelID: str
+    modelLabel: str
     image: str
     scale: Dict[str, Dict[str, List[float]]]    
 
 class Core(BaseModel):
     itemString: str
 
-@app.post("/core")
-async def core(item: Core):
-    print(item.itemString)
-    #wake_model(item.model)
+@app.get("/core")
+async def core():
+    if not os.path.exists(pictures_directory):
+        os.makedirs(pictures_directory)
+    base64_data = []  # List to hold parsed data from each JSON file
+    prompt_data = []
+    # Iterate through each file in the directory
+    for filename in os.listdir(pictures_directory):
+        # Check if the file is a JSON file
+        if filename.endswith('.json'):
+            file_path = os.path.join(pictures_directory, filename)
+            
+            # Open and parse the JSON file
+            with open(file_path, 'r') as file:
+                data = json.load(file)
+                base64_data.append(data["base64image"])
+                prompt_data.append(data["returnedPrompt"])
+    return {"base64": base64_data, "prompt": prompt_data}
+    
 
 def getPrompt(prompt, modelID, attempts=1):
     input = prompt
@@ -109,10 +127,6 @@ async def wake_model(modelID):
     except Exception as e:
         print(f"An error occurred: {e}")
         
-def chunk_prompt(prompt, tokenizer, chunk_size=77):
-    tokens = tokenizer.encode(prompt)
-    chunks = [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
-    return chunks
 
 def gradioSD3(item):
     client = Client(item.modelID, hf_token=token)
@@ -131,8 +145,9 @@ def gradioSD3(item):
     img_byte_arr = BytesIO()
     img.save(img_byte_arr, format='PNG')
     img_byte_arr = img_byte_arr.getvalue()
-    base64_img = base64.b64encode(img_byte_arr)
+    base64_img = base64.b64encode(img_byte_arr).decode('utf-8')
     
+    save_image(base64_img, item)
     return base64_img
 
 def gradioRefiner(item):
@@ -161,7 +176,6 @@ def gradioRefiner(item):
     base64_img = base64.b64encode(img_byte_arr)
     
     return base64_img
-    
 
 @app.post("/api")
 async def inference(item: Item):
@@ -198,73 +212,35 @@ async def inference(item: Item):
         prompt = "PaperCut, " + item.prompt
 
     tokenizer = AutoTokenizer.from_pretrained(item.modelID, subfolder="tokenizer") 
+    def chunk_prompt(prompt, tokenizer, chunk_size=77):
+        tokens = tokenizer.encode(prompt)
+        chunks = [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
+        return chunks
+
     chunks = chunk_prompt(item.prompt, tokenizer)
-    
     tokenized_chunks = [tokenizer.encode(tokenizer.decode(chunk), return_tensors="pt") for chunk in chunks]
     tokenized_prompt = torch.cat(tokenized_chunks, dim=1)
     tokenized_prompt_list = tokenized_prompt.tolist()[0]
-    
     data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": perm_negative_prompt, "options":options}
     
     api_data = json.dumps(data)
-    response = requests.post( API_URL + item.modelID, headers=headers, data=api_data)
-
+    response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
+    
     image_stream = BytesIO(response.content)
     image = Image.open(image_stream)
     image.save("response.png")
     with open('response.png', 'rb') as f:
-        base64image = base64.b64encode(f.read())
-    
-    return {"output": base64image}
-    
+        base64_img = base64.b64encode(f.read()).decode('utf-8')
+    save_image(base64_img, item)
 
-@app.post("/img2img")
-async def img2img(item: Item):
-    print()
-    if "pix2pix" in item.modelID:
-        pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(item.modelID, torch_dtype=torch.float16, safety_checker=None)
-        pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
-        
-        image_data = base64.b64decode(item.image.split(",")[1])
-        image = Image.open(BytesIO(image_data))
-        image = ImageOps.exif_transpose(image)
-        image = image.convert("RGB")
-        
-        images = pipe(item.prompt, image=image, num_inference_steps=item.steps, image_guidance_scale=item.guidance).images
-        
-        image_stream = BytesIO(images[0])
-        image = Image.open(image_stream)
-        image.save("response.png")
-        with open('response.png', 'rb') as f:
-            base64image = base64.b64encode(f.read())
-        
-        return {"output": base64image}
-    else:
-        pipeline = AutoPipelineForText2Image.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16)
-        if "up" in item.scale or "down" in item.scale:
-            pipeline.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
-            pipeline.set_ip_adapter_scale(item.scale)
+    return {"output": base64_img}
 
-        image_data = base64.b64decode(item.image)
-        image = Image.open(BytesIO(image_data))
-
-        generator = torch.Generator(device="cpu").manual_seed(99)
-        image = pipeline(
-            prompt=item.prompt,
-            ip_adapter_image=image,
-            negative_prompt=perm_negative_prompt,
-            guidance_scale=item.guidance,
-            num_inference_steps=item.steps,
-            generator=generator,
-        ).images[0]
-        image.save("response.png")
-
-        with open('response.png', 'rb') as f:
-            base64image = base64.b64encode(f.read())
-        
-        return {"output": base64image}
-    
-
+def save_image(base64image, item):
+    data = {"base64image": "data:image/png;base64," + base64image, "returnedPrompt": item.modelLabel + " " + item.prompt, "prompt": item.prompt, "steps": item.steps, "guidance": item.guidance, "scale": item.scale}
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    file_path = os.path.join(pictures_directory, f'{timestamp}.json')
+    with open(file_path, 'w') as json_file:
+        json.dump(data, json_file)
 
 prompt_base = 'Instructions:\
 \
@@ -280,7 +256,6 @@ Remember:\
 - The prompt should be concise yet descriptive.\
 - Avoid overly complex or abstract phrases.\
 - Make sure the prompt evokes strong imagery and can guide the creation of visual content.'
-
 
 app.mount("/", StaticFiles(directory="web-build", html=True), name="build")
 
