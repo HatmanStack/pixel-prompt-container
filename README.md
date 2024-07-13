@@ -35,26 +35,13 @@ All models are opensource and available on HuggingFace.
 
 ### Diffusion
 
-#### Image to Image
-
-- **timbrooks/instruct-pix2pix**
-- **stabilityai/stable-diffusion-xl-refiner-1.0**
-       
-#### Text to Image
-
 - **stabilityai/stable-diffusion-3-medium**
 - **stabilityai/stable-diffusion-xl-base-1.0**
-- **SPO-Diffusion-Models/SPO-SDXL_4k-p_10ep**
-- **Fictiverse/Fictiverse/Stable_Diffusion_VoxelArt_Model**
-- **Fictiverse/Stable_Diffusion_PaperCut_Model**
+- **fluently/Fluently-XL-Final**
+- **nerijs/pixel-art-xl**
+- **Fictiverse/Voxel_XL_Lora**
 - **dallinmackay/Van-Gogh-diffusion**
-- **nousr/robo-diffusion**
-- **Eugeoter/artiwaifu-diffusion-1.0**
-- **nitrosocke/Arcane-Diffusion**
-- **Fictiverse/Stable_Diffusion_BalloonArt_Model**
-- **prompthero/openjourney**
-- **juliajoanna/sdxl-flintstones_finetuning_1**
-- **segmind/Segmind-Vega**
+- **gsdf/Counterfeit-V2.5**
 - **digiplay/AbsoluteReality_v1.8.1**
 - **dreamlike-art/dreamlike-photoreal-2.0**
 - **digiplay/Acorn_Photo_v1**

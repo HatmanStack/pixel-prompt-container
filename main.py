@@ -150,79 +150,27 @@ def gradioSD3(item):
     save_image(base64_img, item)
     return base64_img
 
-def gradioRefiner(item):
-    image_data = base64.b64decode(item.image)
-    # Save the image to a file
-    with open('image.png', 'wb') as f:
-        f.write(image_data)
-    client = Client("tonyassi/IP-Adapter-Playground", hf_token=token)
-    result = client.predict(
-            ip=file('image.png'),
-            prompt=item.prompt,
-            neg_prompt=perm_negative_prompt,
-            width=1024,
-            height=1024,
-            ip_scale=item.scale,
-            strength=0.7,
-            guidance=item.guidance,
-            steps=item.steps,
-            api_name="/text_to_image"
-    )
-    
-    img = Image.open(result[0])
-    img_byte_arr = BytesIO()
-    img.save(img_byte_arr, format='PNG')
-    img_byte_arr = img_byte_arr.getvalue()
-    base64_img = base64.b64encode(img_byte_arr)
-    
-    return base64_img
-
 @app.post("/api")
 async def inference(item: Item):
     if "stable-diffusion-3" in item.modelID:
         useGradio = gradioSD3(item)
         return {"output": useGradio}
-    if "gradiotxt2img" in item.modelID:
-        useGradio = gradioRefiner(item)
-        return {"output": useGradio}
+    
     activeModels = InferenceClient().list_deployed_models()
     if item.modelID not in activeModels['text-to-image']:
         asyncio.create_task(wake_model(item.modelID))
-        return {"output": "Model Waking"}
-    
+        return {"output": "Model Waking"}  
     print("Model active")
+
     prompt = item.prompt
-    if "stable-diffusion" in item.modelID:
-        prompt = item.prompt
     if "dallinmackay" in item.modelID:
         prompt = "lvngvncnt, " + item.prompt
-    if "nousr" in item.modelID:
-        prompt = "nousr robot, " + item.prompt
-    if "nitrosocke" in item.modelID:
-        prompt = "arcane, " + item.prompt
     if "dreamlike" in item.modelID:
         prompt = "photo, " + item.prompt
-    if "prompthero" in item.modelID:
-        prompt = "mdjrny-v4 style, " + item.prompt 
     if "Voxel" in item.modelID:
-        prompt = "VoxelArt, " + item.prompt
-    if "BalloonArt" in item.modelID:
-        prompt = "BalloonArt, " + item.prompt
-    if "PaperCut" in item.modelID:
-        prompt = "PaperCut, " + item.prompt
-
-    tokenizer = AutoTokenizer.from_pretrained(item.modelID, subfolder="tokenizer") 
-    def chunk_prompt(prompt, tokenizer, chunk_size=77):
-        tokens = tokenizer.encode(prompt)
-        chunks = [tokens[i:i+chunk_size] for i in range(0, len(tokens), chunk_size)]
-        return chunks
-
-    chunks = chunk_prompt(item.prompt, tokenizer)
-    tokenized_chunks = [tokenizer.encode(tokenizer.decode(chunk), return_tensors="pt") for chunk in chunks]
-    tokenized_prompt = torch.cat(tokenized_chunks, dim=1)
-    tokenized_prompt_list = tokenized_prompt.tolist()[0]
-    data = {"inputs":tokenizer.decode(tokenized_prompt_list), "negative_prompt": perm_negative_prompt, "options":options}
+        prompt = "voxel style, " + item.prompt
     
+    data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
     api_data = json.dumps(data)
     response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
     
