@@ -11,7 +11,7 @@ license: mit
 
 This repository contains a static React Native application built using Expo with FastApi and Docker for deployment.   It's serving several diffusion models that use the huggingface [inference-api](https://huggingface.co/docs/api-inference/index). A blog post explaining this deployment and the HuggingFace Inference API can be found [here](https://medium.com/@HatmanStack/cloud-bound-hugging-face-spaces-1101c569690d).
 
-## Preview :zap:
+## Code :zap:
 
 To preview the application visit the hosted version on the Hugging Face Spaces platform [here](https://hatman-pixel-prompt.hf.space).
 
@@ -42,8 +42,6 @@ All models are opensource and available on HuggingFace.
 - **Fictiverse/Voxel_XL_Lora**
 - **dallinmackay/Van-Gogh-diffusion**
 - **gsdf/Counterfeit-V2.5**
-- **digiplay/AbsoluteReality_v1.8.1**
-- **dreamlike-art/dreamlike-photoreal-2.0**
 - **digiplay/Acorn_Photo_v1**
 
 ### Prompts

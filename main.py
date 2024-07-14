@@ -1,3 +1,4 @@
+import random
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -5,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient, login
 from transformers import AutoTokenizer
 from pydantic import BaseModel
-from gradio_client import Client, file
+from gradio_client import Client
+from diffusers import AutoPipelineForText2Image
+from diffusers.utils import load_image
 from datetime import datetime
 import torch
 import json
@@ -18,6 +21,8 @@ from io import BytesIO
 import aiohttp
 import asyncio
 from dotenv import load_dotenv
+import boto3
+
 
 app = FastAPI()
 
@@ -125,8 +130,7 @@ async def wake_model(modelID):
         print('Model Waking')
         
     except Exception as e:
-        print(f"An error occurred: {e}")
-        
+        print(f"An error occurred: {e}")        
 
 def gradioSD3(item):
     client = Client(item.modelID, hf_token=token)
@@ -150,35 +154,59 @@ def gradioSD3(item):
     save_image(base64_img, item)
     return base64_img
 
+def gradioIPAdapter(item):
+    client = Client('Hatman/12038975', hf_token=token)
+    result = client.predict(
+            scale=item.scale,
+            image=item.image,
+            prompt=item.prompt,
+            negative_prompt=perm_negative_prompt,
+            randomize_seed=True,
+            width=1024,
+            height=1024,
+            guidance_scale=item.guidance,
+            num_inference_steps=item.steps,
+            api_name="/pixel_prompt_ip_adapter"
+    )
+    
+    img = Image.open(result[0])
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr = img_byte_arr.getvalue()
+    base64_img = base64.b64encode(img_byte_arr).decode('utf-8')
+    
+    save_image(base64_img, item)
+    return base64_img
+
 @app.post("/api")
 async def inference(item: Item):
+    prompt = item.prompt
+    activeModels = InferenceClient().list_deployed_models()
+    #if "none" not in item.scale.keys():
+        #base64_img = gradioIPAdapter(item)
     if "stable-diffusion-3" in item.modelID:
         useGradio = gradioSD3(item)
         return {"output": useGradio}
-    
-    activeModels = InferenceClient().list_deployed_models()
-    if item.modelID not in activeModels['text-to-image']:
+    elif "Voxel" in item.modelID or "pixel" in item.modelID:
+        if "Voxel" in item.modelID:
+            prompt = "voxel style, " + item.prompt
+        base64_img = lambda_image(prompt, item.modelID)
+    elif item.modelID not in activeModels['text-to-image']:
         asyncio.create_task(wake_model(item.modelID))
         return {"output": "Model Waking"}  
-    print("Model active")
+    else:
+        print("Model active")
+        if "dallinmackay" in item.modelID:
+            prompt = "lvngvncnt, " + item.prompt
+        data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
+        api_data = json.dumps(data)
+        response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
+        image_stream = BytesIO(response.content)
+        image = Image.open(image_stream)
+        image.save("response.png")
+        with open('response.png', 'rb') as f:
+            base64_img = base64.b64encode(f.read()).decode('utf-8')
 
-    prompt = item.prompt
-    if "dallinmackay" in item.modelID:
-        prompt = "lvngvncnt, " + item.prompt
-    if "dreamlike" in item.modelID:
-        prompt = "photo, " + item.prompt
-    if "Voxel" in item.modelID:
-        prompt = "voxel style, " + item.prompt
-    
-    data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
-    api_data = json.dumps(data)
-    response = requests.request("POST", API_URL + item.modelID, headers=headers, data=api_data)
-    
-    image_stream = BytesIO(response.content)
-    image = Image.open(image_stream)
-    image.save("response.png")
-    with open('response.png', 'rb') as f:
-        base64_img = base64.b64encode(f.read()).decode('utf-8')
     save_image(base64_img, item)
 
     return {"output": base64_img}
@@ -189,6 +217,27 @@ def save_image(base64image, item):
     file_path = os.path.join(pictures_directory, f'{timestamp}.json')
     with open(file_path, 'w') as json_file:
         json.dump(data, json_file)
+
+def lambda_image(prompt, modelID):
+    data = {
+    "prompt": prompt,
+    "modelID": modelID
+    }
+    serialized_data = json.dumps(data)
+    aws_id = os.environ.get("AWS_ID")
+    aws_secret = os.environ.get("AWS_SECRET")
+    aws_region = os.environ.get("AWS_REGION")
+    session = boto3.Session(aws_access_key_id=aws_id, aws_secret_access_key=aws_secret, region_name=aws_region)
+    lambda_client = session.client('lambda')
+    response = lambda_client.invoke(
+        FunctionName='pixel_prompt_lambda',
+        InvocationType='RequestResponse',  
+        Payload=serialized_data  
+    )
+    response_payload = response['Payload'].read()
+    response_data = json.loads(response_payload)
+
+    return response_data['body']
 
 prompt_base = 'Instructions:\
 \
