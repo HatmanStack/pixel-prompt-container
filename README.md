@@ -35,18 +35,21 @@ All models are opensource and available on HuggingFace.
 
 ### Diffusion
 
+- **Random**
 - **stabilityai/stable-diffusion-3-medium**
+- **dataautogpt3/OpenDalleV1.1**
+- **SG161222/RealVisXL_V4.0**
+- **digiplay/Juggernaut_final**
+- **gokaygokay/Kolors**
 - **stabilityai/stable-diffusion-xl-base-1.0**
 - **fluently/Fluently-XL-Final**
 - **nerijs/pixel-art-xl**
 - **Fictiverse/Voxel_XL_Lora**
 - **dallinmackay/Van-Gogh-diffusion**
 - **gsdf/Counterfeit-V2.5**
-- **digiplay/Acorn_Photo_v1**
 
 ### Prompts
 
-- **mistralai/Mistral-7B-Instruct-v0.3**
 - **Gustavosta/MagicPrompt-Stable-Diffusion**
 - **meta-llama/Meta-Llama-3-70B-Instruct**
 
