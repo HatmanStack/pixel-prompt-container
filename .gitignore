@@ -6,6 +6,10 @@ app.json
 package-lock.json
 __pycache__/
 pictures/
+gradio/
+test/
+style.png
+response.png
 
 # macOS
 .DS_Store

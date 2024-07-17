@@ -6,24 +6,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import InferenceClient, login
 from transformers import AutoTokenizer
 from pydantic import BaseModel
-from gradio_client import Client
-from diffusers import AutoPipelineForText2Image
+from gradio_client import Client, file
 from starlette.responses import StreamingResponse
-from diffusers.utils import load_image
 from datetime import datetime
-import torch
 import json
 import requests
 import base64
-import os
-from typing import Dict, List  
+import os 
 from PIL import Image
 from io import BytesIO
 import aiohttp
 import asyncio
+from typing import Optional
 from dotenv import load_dotenv
 import boto3
-
 
 app = FastAPI()
 
@@ -39,10 +35,10 @@ load_dotenv()
 token = os.environ.get("HF_TOKEN")
 login(token)
 
-prompt_model = "mistralai/Mistral-7B-Instruct-v0.3"
+prompt_model = "meta-llama/Meta-Llama-3-8B-Instruct"
 magic_prompt_model = "Gustavosta/MagicPrompt-Stable-Diffusion"
 options = {"use_cache": False, "wait_for_model": True}
-parameters = {"return_full_text":False}
+parameters = {"return_full_text":False, "max_new_tokens":300}
 headers = {"Authorization": f"Bearer {token}", "x-use-cache":"0", 'Content-Type' :'application/json'}
 API_URL = f'https://api-inference.huggingface.co/models/'
 perm_negative_prompt = "watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
@@ -55,8 +51,9 @@ class Item(BaseModel):
     guidance: float
     modelID: str
     modelLabel: str
-    image: str
-    scale: Dict[str, Dict[str, List[float]]]    
+    image: Optional[str] = None
+    target: str
+    control: float 
 
 class Core(BaseModel):
     itemString: str
@@ -93,7 +90,7 @@ def getPrompt(prompt, modelID, attempts=1):
         tokenizer = AutoTokenizer.from_pretrained(modelID)
         chat = [
             {"role": "user", "content": prompt_base},
-            {"role": "assistant", "content": "What is your seed string?"},
+            {"role": "assistant", "content": prompt_assistant},
             {"role": "user", "content": prompt},
             ]
         input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
@@ -115,13 +112,17 @@ def getPrompt(prompt, modelID, attempts=1):
         if attempts < 3:
             getPrompt(prompt, modelID, attempts + 1)
     return response.json()
-    
+
 @app.post("/inferencePrompt")
-async def inferencePrompt(item: Core):
-    plain_response_data = getPrompt(item.itemString, prompt_model)
-    magic_response_data = getPrompt(item.itemString, magic_prompt_model)
-    returnJson = {"plain": plain_response_data[0]["generated_text"], "magic": item.itemString + magic_response_data[0]["generated_text"]}
-    return returnJson
+def inferencePrompt(item: Core):
+    try:
+        plain_response_data = getPrompt(item.itemString, prompt_model)
+        magic_response_data = getPrompt(item.itemString, magic_prompt_model)
+        print(plain_response_data[0]["generated_text"])
+        returnJson = {"plain": plain_response_data[0]["generated_text"], "magic": item.itemString + magic_response_data[0]["generated_text"]}
+        return returnJson
+    except Exception as e:
+        returnJson = {"plain": f'An Error occured: {e}', "magic": f'An Error occured: {e}'}
 
 async def wake_model(modelID):
     data = {"inputs":"wake up call", "options":options}
@@ -148,7 +149,7 @@ def formatReturn(result):
     return base64_img
 
 def save_image(base64image, item, model):
-    data = {"base64image": "data:image/png;base64," + base64image, "returnedPrompt": "Model:\n" + model + "\n\nPrompt:\n" + item.prompt, "prompt": item.prompt, "steps": item.steps, "guidance": item.guidance, "scale": item.scale}
+    data = {"base64image": "data:image/png;base64," + base64image, "returnedPrompt": "Model:\n" + model + "\n\nPrompt:\n" + item.prompt, "prompt": item.prompt, "steps": item.steps, "guidance": item.guidance, "control": item.control, "target": item.target}
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     file_path = os.path.join(pictures_directory, f'{timestamp}.json')
     with open(file_path, 'w') as json_file:
@@ -179,9 +180,36 @@ def gradioKolors(item):
             seed=0,
             api_name="/predict"
     )
-    return formatReturn(result[0])
+    
+    return formatReturn(result[0][0]["image"])
 
-def gradioHatman(item):
+
+def gradopHatmanInstantStyle(item):
+    client = Client("Hatman/InstantStyle")
+    image_stream = BytesIO(base64.b64decode(item.image.split("base64,")[1]))
+    image = Image.open(image_stream)
+    image.save("style.png")
+
+    result = client.predict(
+            image_pil=file("style.png"),
+            input_image=None,
+            prompt=item.prompt,
+            n_prompt=perm_negative_prompt,
+            scale=1,
+            control_scale=item.control,
+            guidance_scale=item.guidance,
+            num_samples=1,
+            num_inference_steps=item.steps,
+            seed=1,
+            target=item.target,
+            api_name="/create_image"
+    )
+    print(result)
+    return formatReturn(result[0]["image"])
+    
+    
+
+def gradioHatmanOpenDalle(item):
     client = Client("Hatman/OpenDalle", hf_token=token)
     print("test")
     result = client.predict(
@@ -189,7 +217,7 @@ def gradioHatman(item):
             negative_prompt="Hello!!",
             prompt_2="Hello!!",
             negative_prompt_2="Hello!!",
-            use_negative_prompt=False,
+            use_negative_prompt=True,
             use_prompt_2=False,
             use_negative_prompt_2=False,
             seed=0,
@@ -202,7 +230,6 @@ def gradioHatman(item):
             apply_refiner=False,
             api_name="/run"
     )
-    print(result)
     return formatReturn(result)
 
 def gradioHamster(item):
@@ -218,7 +245,6 @@ def gradioHamster(item):
             num_inference_steps=item.steps,
             api_name="/run"
     )
-    print(result[0])
     return formatReturn(result[0][0]["image"])
 
 def lambda_image(prompt, modelID):
@@ -265,9 +291,10 @@ async def inference(item: Item):
     base64_img = ""
     model = item.modelID
     try:
-        #if "none" not in item.scale.keys():
-            #base64_img = gradioIPAdapter(item)
-        if "Random" in item.modelID:
+        if item.image:
+            model = "stabilityai/stable-diffusion-xl-base-1.0"
+            base64_img = gradopHatmanInstantStyle(item)
+        elif "Random" in item.modelID:
             model = random.choice(activeModels['text-to-image'])
             print(model)
             base64_img = inferenceAPI(model, item)
@@ -278,7 +305,7 @@ async def inference(item: Item):
         elif "Kolors" in item.modelID:
             base64_img = gradioKolors(item)
         elif "OpenDalle" in item.modelID:
-            base64_img = gradioHatman(item)
+            base64_img = gradioHatmanOpenDalle(item)
         elif "Voxel" in item.modelID or "pixel" in item.modelID:
             prompt = item.prompt
             if "Voxel" in item.modelID:
@@ -289,6 +316,8 @@ async def inference(item: Item):
             return {"output": "Model Waking"}  
         else:
             base64_img = inferenceAPI(item.modelID, item)
+        
+        print(base64_img[:150])
         save_image(base64_img, item, model)
     except Exception as e:
         print(f"An error occurred: {e}") 
@@ -298,18 +327,20 @@ async def inference(item: Item):
 prompt_base = 'Instructions:\
 \
 1. Take the provided seed string as inspiration.\
-2. Formulate a single-sentence prompt that is clear, vivid, and imaginative.\
-3. Ensure the prompt is between 50 and 100 tokens.\
+2. Generate a prompt that is clear, vivid, and imaginative.\
+3. Ensure the prompt is between 90 and 100 tokens.\
 4. Return only the prompt.\
 Format your response as follows:\
 Stable Diffusion Prompt: [Your prompt here]\
 \
 Remember:\
 \
-- The prompt should be concise yet descriptive.\
+- The prompt should be descriptive.\
 - Avoid overly complex or abstract phrases.\
 - Make sure the prompt evokes strong imagery and can guide the creation of visual content.\
-- Make sure the prompt is between 50 and 100 tokens.'
+- Make sure the prompt is between 90 and 100 tokens.'
+
+prompt_assistant = "I am ready to return a prompt that is between 90 and 100 tokens.  What is your seed string?"
 
 app.mount("/", StaticFiles(directory="web-build", html=True), name="build")
 
