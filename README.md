@@ -37,12 +37,7 @@ All models are opensource and available on HuggingFace.
 
 - **Random**
 - **stabilityai/stable-diffusion-3-medium**
-- **dataautogpt3/OpenDalleV1.1**
-- **SG161222/RealVisXL_V4.0**
-- **digiplay/Juggernaut_final**
-- **Kwai-Kolors/Kolors**
 - **stabilityai/stable-diffusion-xl-base-1.0**
-- **fluently/Fluently-XL-Final**
 - **nerijs/pixel-art-xl**
 - **Fictiverse/Voxel_XL_Lora**
 - **dallinmackay/Van-Gogh-diffusion**

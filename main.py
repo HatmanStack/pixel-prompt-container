@@ -44,6 +44,7 @@ API_URL = f'https://api-inference.huggingface.co/models/'
 perm_negative_prompt = "watermark, lowres, low quality, worst quality, deformed, glitch, low contrast, noisy, saturation, blurry"
 cwd = os.getcwd()
 pictures_directory = os.path.join(cwd, 'pictures')
+last_two_models = []
 
 class Item(BaseModel):
     prompt: str
@@ -166,25 +167,7 @@ def gradioSD3(item):
     )
     return formatReturn(result[0])
 
-def gradioKolors(item):
-    client = Client("gokaygokay/Kolors", hf_token=token)
-    result = client.predict(
-            prompt=item.modelID,
-            negative_prompt=perm_negative_prompt,
-            height=1024,
-            width=1024,
-            num_inference_steps=item.steps,
-            guidance_scale=item.guidance,
-            num_images_per_prompt=1,
-            use_random_seed=True,
-            seed=0,
-            api_name="/predict"
-    )
-    
-    return formatReturn(result[0][0]["image"])
-
-
-def gradopHatmanInstantStyle(item):
+def gradioHatmanInstantStyle(item):
     client = Client("Hatman/InstantStyle")
     image_stream = BytesIO(base64.b64decode(item.image.split("base64,")[1]))
     image = Image.open(image_stream)
@@ -192,60 +175,19 @@ def gradopHatmanInstantStyle(item):
 
     result = client.predict(
             image_pil=file("style.png"),
-            input_image=None,
             prompt=item.prompt,
             n_prompt=perm_negative_prompt,
             scale=1,
             control_scale=item.control,
             guidance_scale=item.guidance,
-            num_samples=1,
             num_inference_steps=item.steps,
             seed=1,
             target=item.target,
             api_name="/create_image"
     )
+
     print(result)
     return formatReturn(result[0]["image"])
-    
-    
-
-def gradioHatmanOpenDalle(item):
-    client = Client("Hatman/OpenDalle", hf_token=token)
-    print("test")
-    result = client.predict(
-            prompt=item.prompt,
-            negative_prompt="Hello!!",
-            prompt_2="Hello!!",
-            negative_prompt_2="Hello!!",
-            use_negative_prompt=True,
-            use_prompt_2=False,
-            use_negative_prompt_2=False,
-            seed=0,
-            width=1024,
-            height=1024,
-            guidance_scale_base=item.guidance,
-            guidance_scale_refiner=5,
-            num_inference_steps_base=item.steps,
-            num_inference_steps_refiner=25,
-            apply_refiner=False,
-            api_name="/run"
-    )
-    return formatReturn(result)
-
-def gradioHamster(item):
-    client = Client("Hatman/STABLE-HAMSTER", hf_token=token)
-    result = client.predict(
-            prompt=item.prompt,
-            negative_prompt=perm_negative_prompt,
-            use_negative_prompt=True,
-            seed=0,
-            width=1024,
-            height=1024,
-            guidance_scale=item.guidance,
-            num_inference_steps=item.steps,
-            api_name="/run"
-    )
-    return formatReturn(result[0][0]["image"])
 
 def lambda_image(prompt, modelID):
     data = {
@@ -278,13 +220,63 @@ def inferenceAPI(model, item):
     data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
     api_data = json.dumps(data)
     response = requests.request("POST", API_URL + model, headers=headers, data=api_data)
-    image_stream = BytesIO(response.content)
-    image = Image.open(image_stream)
-    image.save("response.png")
-    with open('response.png', 'rb') as f:
-        base64_img = base64.b64encode(f.read()).decode('utf-8')
+    return get_random_base64(response)
+
+def get_random_base64(response, attempts=1):
+    try:
+        image_stream = BytesIO(response.content)
+        image = Image.open(image_stream)
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+        base64_img = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        print(response.content)
+        if response.status_code != 200:
+            base64_img = f"An error occurred"
+            return base64_img
+        elif attempts < 2:
+            print("Retrying")
+            get_random_base64(response, attempts + 1)
+        else:
+            base64_img = f"An error occurred"     
     return base64_img
 
+def get_random_model(models):
+    global last_two_models
+    model = None
+    priorities = [
+        "kandinsky-community",
+        "Kolors-diffusers",
+        "AuraFlow",
+        "Juggernaut",
+        "insaneRealistic",
+        "MajicMIX",
+        "digiautogpt3",
+        "fluently"
+    ]
+    
+    for priority in priorities:
+        for i, model_name in enumerate(models):
+            if priority in model_name and model_name not in last_two_models:
+                model = models[i]
+                break 
+        if model is not None:
+            break
+    if model is None:
+        print("Choosing randomly")
+        model = random.choice(models)
+    last_two_models.append(model)
+    last_two_models = last_two_models[-5:]        
+    return model
+   
+def nsfw_check(base64_img):
+    API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
+    data = base64.b64decode(base64_img)
+    response = requests.request("POST", API_URL, headers=headers, data=data)
+    scores = {item['label']: item['score'] for item in json.loads(response.content.decode("utf-8"))}
+    error_msg = "NSFW" if scores.get('nsfw', 0) > scores.get('normal', 0) else None
+    return error_msg
+    
 @app.post("/api")
 async def inference(item: Item):
     activeModels = InferenceClient().list_deployed_models()
@@ -293,19 +285,13 @@ async def inference(item: Item):
     try:
         if item.image:
             model = "stabilityai/stable-diffusion-xl-base-1.0"
-            base64_img = gradopHatmanInstantStyle(item)
+            base64_img = gradioHatmanInstantStyle(item)
         elif "Random" in item.modelID:
-            model = random.choice(activeModels['text-to-image'])
+            model = get_random_model(activeModels['text-to-image'])
             print(model)
             base64_img = inferenceAPI(model, item)
         elif "stable-diffusion-3" in item.modelID:
             base64_img = gradioSD3(item)
-        elif "Hamster" in item.modelID:
-            base64_img = gradioHamster(item)
-        elif "Kolors" in item.modelID:
-            base64_img = gradioKolors(item)
-        elif "OpenDalle" in item.modelID:
-            base64_img = gradioHatmanOpenDalle(item)
         elif "Voxel" in item.modelID or "pixel" in item.modelID:
             prompt = item.prompt
             if "Voxel" in item.modelID:
@@ -316,8 +302,10 @@ async def inference(item: Item):
             return {"output": "Model Waking"}  
         else:
             base64_img = inferenceAPI(item.modelID, item)
-        
-        print(base64_img[:150])
+        if 'error' in base64_img:
+            return {"output": base64_img, "model": model}
+        if nsfw_check(base64_img):
+            return {"output": "NSFW", "model": model}
         save_image(base64_img, item, model)
     except Exception as e:
         print(f"An error occurred: {e}") 
