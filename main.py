@@ -220,6 +220,10 @@ def inferenceAPI(model, item):
     data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
     api_data = json.dumps(data)
     response = requests.request("POST", API_URL + model, headers=headers, data=api_data)
+    holder = response.content
+    if not isinstance(holder, bytes):
+            activeModels = InferenceClient().list_deployed_models()
+            inferenceAPI(get_random_model(activeModels['text-to-image']), item)
     return get_random_base64(response)
 
 def get_random_base64(response, attempts=1):
@@ -266,7 +270,7 @@ def get_random_model(models):
         print("Choosing randomly")
         model = random.choice(models)
     last_two_models.append(model)
-    last_two_models = last_two_models[-5:]        
+    last_two_models = last_two_models[-2:]        
     return model
    
 def nsfw_check(base64_img):
