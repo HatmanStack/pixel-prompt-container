@@ -213,45 +213,36 @@ def lambda_image(prompt, modelID):
 
     return response_data['body']
 
-def inferenceAPI(model, item):
+def inferenceAPI(model, item, attempts = 1):
+    if attempts > 5:
+        return 'An error occured when Processing', model
     prompt = item.prompt
     if "dallinmackay" in model:
         prompt = "lvngvncnt, " + item.prompt
     data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
     api_data = json.dumps(data)
-    response = requests.request("POST", API_URL + model, headers=headers, data=api_data)
-    holder = response.content
-    if not isinstance(holder, bytes):
-            activeModels = InferenceClient().list_deployed_models()
-            inferenceAPI(get_random_model(activeModels['text-to-image']), item)
-    return get_random_base64(response)
-
-def get_random_base64(response, attempts=1):
     try:
+        response = requests.request("POST", API_URL + model, headers=headers, data=api_data)
+        if response is None:
+            inferenceAPI(get_random_model(activeModels['text-to-image']), item, attempts+1) 
         image_stream = BytesIO(response.content)
         image = Image.open(image_stream)
-        buffered = BytesIO()
-        image.save(buffered, format="PNG")
-        base64_img = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        image.save("response.png")
+        with open('response.png', 'rb') as f:
+            base64_img = base64.b64encode(f.read()).decode('utf-8')
+        return model, base64_img
     except Exception as e:
-        print(response.content)
-        if response.status_code != 200:
-            base64_img = f"An error occurred"
-            return base64_img
-        elif attempts < 2:
-            print("Retrying")
-            get_random_base64(response, attempts + 1)
-        else:
-            base64_img = f"An error occurred"     
-    return base64_img
-
+        print(f'Error When Processing Image: {e}')
+        activeModels = InferenceClient().list_deployed_models()
+        return inferenceAPI(get_random_model(activeModels['text-to-image']), item, attempts+1)  
+    
+    
 def get_random_model(models):
     global last_two_models
     model = None
     priorities = [
         "kandinsky-community",
         "Kolors-diffusers",
-        "AuraFlow",
         "Juggernaut",
         "insaneRealistic",
         "MajicMIX",
@@ -270,16 +261,25 @@ def get_random_model(models):
         print("Choosing randomly")
         model = random.choice(models)
     last_two_models.append(model)
-    last_two_models = last_two_models[-2:]        
+    last_two_models = last_two_models[-5:]        
     return model
    
-def nsfw_check(base64_img):
-    API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
-    data = base64.b64decode(base64_img)
-    response = requests.request("POST", API_URL, headers=headers, data=data)
-    scores = {item['label']: item['score'] for item in json.loads(response.content.decode("utf-8"))}
-    error_msg = "NSFW" if scores.get('nsfw', 0) > scores.get('normal', 0) else None
-    return error_msg
+def nsfw_check(attempts = 1):
+    try:
+        API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
+        with open('response.png', 'rb') as f:
+            data = f.read()
+        response = requests.request("POST", API_URL, headers=headers, data=data)
+        print(response.content.decode("utf-8"))
+        scores = {item['label']: item['score'] for item in json.loads(response.content.decode("utf-8"))}
+        error_msg = "NSFW" if scores.get('nsfw') > scores.get('normal') else None
+        return error_msg
+    except Exception as e:
+        print(f'NSFW Check Error: {e}')
+        if attempts > 30:
+            return "NSFW"
+        return nsfw_check(attempts+1)
+    
     
 @app.post("/api")
 async def inference(item: Item):
@@ -293,7 +293,8 @@ async def inference(item: Item):
         elif "Random" in item.modelID:
             model = get_random_model(activeModels['text-to-image'])
             print(model)
-            base64_img = inferenceAPI(model, item)
+            model, base64_img= inferenceAPI(model, item)
+            print(model)
         elif "stable-diffusion-3" in item.modelID:
             base64_img = gradioSD3(item)
         elif "Voxel" in item.modelID or "pixel" in item.modelID:
@@ -305,10 +306,10 @@ async def inference(item: Item):
             asyncio.create_task(wake_model(item.modelID))
             return {"output": "Model Waking"}  
         else:
-            base64_img = inferenceAPI(item.modelID, item)
+            base64_img, model = inferenceAPI(item.modelID, item)
         if 'error' in base64_img:
             return {"output": base64_img, "model": model}
-        if nsfw_check(base64_img):
+        if nsfw_check():
             return {"output": "NSFW", "model": model}
         save_image(base64_img, item, model)
     except Exception as e:
