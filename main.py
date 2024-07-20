@@ -8,6 +8,7 @@ from transformers import AutoTokenizer
 from pydantic import BaseModel
 from gradio_client import Client, file
 from starlette.responses import StreamingResponse
+import re
 from datetime import datetime
 import json
 import requests
@@ -149,12 +150,13 @@ def formatReturn(result):
     
     return base64_img
 
-def save_image(base64image, item, model):
-    data = {"base64image": "data:image/png;base64," + base64image, "returnedPrompt": "Model:\n" + model + "\n\nPrompt:\n" + item.prompt, "prompt": item.prompt, "steps": item.steps, "guidance": item.guidance, "control": item.control, "target": item.target}
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    file_path = os.path.join(pictures_directory, f'{timestamp}.json')
-    with open(file_path, 'w') as json_file:
-        json.dump(data, json_file)
+def save_image(base64image, item, model, NSFW):
+    if not NSFW:
+        data = {"base64image": "data:image/png;base64," + base64image, "returnedPrompt": "Model:\n" + model + "\n\nPrompt:\n" + item.prompt, "prompt": item.prompt, "steps": item.steps, "guidance": item.guidance, "control": item.control, "target": item.target}
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_path = os.path.join(pictures_directory, f'{timestamp}.json')
+        with open(file_path, 'w') as json_file:
+            json.dump(data, json_file)
 
 def gradioSD3(item):
     client = Client(item.modelID, hf_token=token)
@@ -234,7 +236,11 @@ def inferenceAPI(model, item, attempts = 1):
     except Exception as e:
         print(f'Error When Processing Image: {e}')
         activeModels = InferenceClient().list_deployed_models()
-        return inferenceAPI(get_random_model(activeModels['text-to-image']), item, attempts+1)  
+        model = get_random_model(activeModels['text-to-image'])
+        pattern = r'^(.{1,30})\/(.{1,50})$'
+        if not re.match(pattern, model):
+            return "error model not valid", model
+        return inferenceAPI(model, item, attempts+1)  
     
     
 def get_random_model(models):
@@ -272,12 +278,12 @@ def nsfw_check(attempts = 1):
         response = requests.request("POST", API_URL, headers=headers, data=data)
         print(response.content.decode("utf-8"))
         scores = {item['label']: item['score'] for item in json.loads(response.content.decode("utf-8"))}
-        error_msg = "NSFW" if scores.get('nsfw') > scores.get('normal') else None
+        error_msg = True if scores.get('nsfw') > scores.get('normal') else False
         return error_msg
     except Exception as e:
         print(f'NSFW Check Error: {e}')
         if attempts > 30:
-            return "NSFW"
+            return True
         return nsfw_check(attempts+1)
     
     
@@ -286,15 +292,17 @@ async def inference(item: Item):
     activeModels = InferenceClient().list_deployed_models()
     base64_img = ""
     model = item.modelID
+    NSFW = False
     try:
-        if item.image:
-            model = "stabilityai/stable-diffusion-xl-base-1.0"
-            base64_img = gradioHatmanInstantStyle(item)
-        elif "Random" in item.modelID:
+        #if item.image:
+        #    model = "stabilityai/stable-diffusion-xl-base-1.0"
+        #    base64_img = gradioHatmanInstantStyle(item)
+        if "Random" in item.modelID:
             model = get_random_model(activeModels['text-to-image'])
-            print(model)
-            model, base64_img= inferenceAPI(model, item)
-            print(model)
+            pattern = r'^(.{1,30})\/(.{1,50})$'
+            if not re.match(pattern, model):
+                raise ValueError("Model not Valid")
+            model, base64_img= inferenceAPI(model, item) 
         elif "stable-diffusion-3" in item.modelID:
             base64_img = gradioSD3(item)
         elif "Voxel" in item.modelID or "pixel" in item.modelID:
@@ -309,13 +317,13 @@ async def inference(item: Item):
             base64_img, model = inferenceAPI(item.modelID, item)
         if 'error' in base64_img:
             return {"output": base64_img, "model": model}
-        if nsfw_check():
-            return {"output": "NSFW", "model": model}
-        save_image(base64_img, item, model)
+        NSFW = nsfw_check()
+            
+        save_image(base64_img, item, model, NSFW)
     except Exception as e:
         print(f"An error occurred: {e}") 
         base64_img = f"An error occurred: {e}"
-    return {"output": base64_img, "model": model}
+    return {"output": base64_img, "model": model, "NSFW": NSFW}
 
 prompt_base = 'Instructions:\
 \
