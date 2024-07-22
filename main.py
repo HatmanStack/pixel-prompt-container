@@ -169,12 +169,23 @@ def gradioSD3(item):
     )
     return formatReturn(result[0])
 
+def gradioAuraFlow(item):
+    client = Client("multimodalart/AuraFlow")
+    result = client.predict(
+            prompt=item.prompt,
+            negative_prompt=perm_negative_prompt,
+            randomize_seed=True,
+            guidance_scale=item.guidance,
+            num_inference_steps=item.steps,
+            api_name="/infer"
+    )
+    return formatReturn(result[0])
+
 def gradioHatmanInstantStyle(item):
     client = Client("Hatman/InstantStyle")
     image_stream = BytesIO(base64.b64decode(item.image.split("base64,")[1]))
     image = Image.open(image_stream)
     image.save("style.png")
-
     result = client.predict(
             image_pil=file("style.png"),
             prompt=item.prompt,
@@ -187,9 +198,7 @@ def gradioHatmanInstantStyle(item):
             target=item.target,
             api_name="/create_image"
     )
-
-    print(result)
-    return formatReturn(result[0]["image"])
+    return formatReturn(result)
 
 def lambda_image(prompt, modelID):
     data = {
@@ -294,10 +303,12 @@ async def inference(item: Item):
     model = item.modelID
     NSFW = False
     try:
-        #if item.image:
-        #    model = "stabilityai/stable-diffusion-xl-base-1.0"
-        #    base64_img = gradioHatmanInstantStyle(item)
-        if "Random" in item.modelID:
+        if item.image:
+            model = "stabilityai/stable-diffusion-xl-base-1.0"
+            base64_img = gradioHatmanInstantStyle(item)
+        elif "AuraFlow" in item.modelID:
+            base64_img = gradioAuraFlow(item)
+        elif "Random" in item.modelID:
             model = get_random_model(activeModels['text-to-image'])
             pattern = r'^(.{1,30})\/(.{1,50})$'
             if not re.match(pattern, model):
@@ -329,8 +340,9 @@ prompt_base = 'Instructions:\
 \
 1. Take the provided seed string as inspiration.\
 2. Generate a prompt that is clear, vivid, and imaginative.\
-3. Ensure the prompt is between 90 and 100 tokens.\
-4. Return only the prompt.\
+3. This is a visual image so any reference to senses other than sight should be avoided.\
+4. Ensure the prompt is between 90 and 100 tokens.\
+5. Return only the prompt.\
 Format your response as follows:\
 Stable Diffusion Prompt: [Your prompt here]\
 \

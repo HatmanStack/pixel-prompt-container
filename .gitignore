@@ -8,8 +8,10 @@ __pycache__/
 pictures/
 gradio/
 test/
+test.png
 style.png
 response.png
+test.py
 
 # macOS
 .DS_Store

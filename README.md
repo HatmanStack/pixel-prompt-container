@@ -36,6 +36,7 @@ All models are opensource and available on HuggingFace.
 ### Diffusion
 
 - **Random**
+- **fal/AuraFlow**
 - **stabilityai/stable-diffusion-3-medium**
 - **stabilityai/stable-diffusion-xl-base-1.0**
 - **nerijs/pixel-art-xl**
