@@ -14,6 +14,7 @@ import json
 import requests
 import base64
 import os 
+import time
 from PIL import Image
 from io import BytesIO
 import aiohttp
@@ -36,7 +37,7 @@ load_dotenv()
 token = os.environ.get("HF_TOKEN")
 login(token)
 
-prompt_model = "meta-llama/Meta-Llama-3-8B-Instruct"
+prompt_model = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 magic_prompt_model = "Gustavosta/MagicPrompt-Stable-Diffusion"
 options = {"use_cache": False, "wait_for_model": True}
 parameters = {"return_full_text":False, "max_new_tokens":300}
@@ -97,7 +98,8 @@ def getPrompt(prompt, modelID, attempts=1):
             ]
         input = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     try:
-        apiData={"inputs":input, "parameters": parameters, "options": options}
+        print(modelID)
+        apiData={"inputs":input, "parameters": parameters, "options": options, "timeout": 45}
         response = requests.post(API_URL + modelID, headers=headers, data=json.dumps(apiData))
         if response.status_code == 200:
             try:
@@ -179,7 +181,8 @@ def gradioAuraFlow(item):
             num_inference_steps=item.steps,
             api_name="/infer"
     )
-    return formatReturn(result[0])
+    print(result[0])
+    return formatReturn(result[0]["value"])
 
 def gradioHatmanInstantStyle(item):
     client = Client("Hatman/InstantStyle")
@@ -225,12 +228,13 @@ def lambda_image(prompt, modelID):
     return response_data['body']
 
 def inferenceAPI(model, item, attempts = 1):
+    print(model)
     if attempts > 5:
         return 'An error occured when Processing', model
     prompt = item.prompt
     if "dallinmackay" in model:
         prompt = "lvngvncnt, " + item.prompt
-    data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options}
+    data = {"inputs":prompt, "negative_prompt": perm_negative_prompt, "options":options, "timeout": 45}
     api_data = json.dumps(data)
     try:
         response = requests.request("POST", API_URL + model, headers=headers, data=api_data)
@@ -290,6 +294,8 @@ def nsfw_check(attempts = 1):
         error_msg = True if scores.get('nsfw') > scores.get('normal') else False
         return error_msg
     except Exception as e:
+        loadTime = json.load(response.content.decode("utf-8"))
+        time.sleep(loadTime["estimated_time"])
         print(f'NSFW Check Error: {e}')
         if attempts > 30:
             return True
