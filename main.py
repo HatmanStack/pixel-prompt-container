@@ -260,6 +260,7 @@ def get_random_model(models):
     global last_two_models
     model = None
     priorities = [
+        "FLUX",
         "kandinsky-community",
         "Kolors-diffusers",
         "Juggernaut",
@@ -283,19 +284,28 @@ def get_random_model(models):
     last_two_models = last_two_models[-5:]        
     return model
    
-def nsfw_check(attempts = 1):
+def nsfw_check(attempts=1):
     try:
         API_URL = "https://api-inference.huggingface.co/models/Falconsai/nsfw_image_detection"
         with open('response.png', 'rb') as f:
             data = f.read()
         response = requests.request("POST", API_URL, headers=headers, data=data)
-        print(response.content.decode("utf-8"))
-        scores = {item['label']: item['score'] for item in json.loads(response.content.decode("utf-8"))}
-        error_msg = True if scores.get('nsfw') > scores.get('normal') else False
+        decoded_response = response.content.decode("utf-8")
+        print(decoded_response)
+        
+        json_response = json.loads(decoded_response)
+        
+        if "error" in json_response:
+            time.sleep(json_response["estimated_time"])
+            return nsfw_check(attempts+1)
+        
+        scores = {item['label']: item['score'] for item in json_response}
+        error_msg = scores.get('nsfw', 0) > scores.get('normal', 0)
         return error_msg
+    except json.JSONDecodeError as e:
+        print(f'JSON Decoding Error: {e}')
+        return True
     except Exception as e:
-        loadTime = json.load(response.content.decode("utf-8"))
-        time.sleep(loadTime["estimated_time"])
         print(f'NSFW Check Error: {e}')
         if attempts > 30:
             return True
